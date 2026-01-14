@@ -1,0 +1,12 @@
+node_modules
+vsix
+.vscode-test.mjs
+.vscodeignore
+.vscode-test/**
+out/**
+.yarnrc
+**/tsconfig.json
+**/eslint.config.mjs
+**/*.map
+**/.vscode-test.*
+

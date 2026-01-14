@@ -1,0 +1,48 @@
+{
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "extension.replaceTabs",
+        "title": "Replace Tabs with Spaces"
+      }
+    ],
+    "keybindings": []
+  },
+  "dependencies": {
+    "@types/vscode": "^1.91.0",
+    "@vscode/vsce": "^3.1.1"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.7",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.91.0",
+    "@typescript-eslint/eslint-plugin": "^8.3.0",
+    "@typescript-eslint/parser": "^8.3.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "eslint": "^9.9.1",
+    "typescript": "^5.5.4"
+  },
+  "displayName": "Simple Auto Formatter",
+  "engines": {
+    "vscode": "^1.91.0"
+  },
+  "main": "./out/extension.js",
+  "name": "simple-auto-formatter",
+  "publisher": "rssaromeo",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "lint": "eslint src",
+    "pretest": "npm run compile && npm run lint",
+    "test": "vscode-test",
+    "vscode:prepublish": "npm run compile",
+    "watch": "tsc -watch -p ./"
+  },
+  "version": "22.0.0"
+}
