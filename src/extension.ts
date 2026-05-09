@@ -1,10 +1,3 @@
-// @name remove ai comments
-// @regex \n *(//) [A-Z].*
-// @replace
-// @endregex
-// @regex  (//) [A-Z].*
-// @replace
-// @endregex
 // @name separate functions
 // @regex (?<=[^\n])\n(function \w+)
 // @replace
@@ -24,26 +17,26 @@ declare global {
   function clear(...args: any[]): void
 }
 
-function getlang() {
+function getlang(e: vscode.Position) {
   const editor = vscode.window.activeTextEditor
   if (!editor) {
     vscode.window.showInformationMessage(
-      "No active editor found. Please open a file."
+      "No active editor found. Please open a file.",
     )
     return ""
   }
   const document = editor.document
-  const cursorPosition = editor.selection.active
+  const cursorPosition = e
   const thisLine = cursorPosition.line
   var fulltext = document.getText()
   const scriptMatches = fulltext.matchAll(
-    /(?<=<script\b[^>]*>)([\s\S]*?)(?=<\/script>)/g
+    /(?<=<script\b[^>]*>)([\s\S]*?)(?=<\/script>)/g,
   )
   let isThisLineInsideScriptTag = false
   for (const match of scriptMatches) {
     const matchStartPosition = document.positionAt(match.index)
     const matchEndPosition = document.positionAt(
-      match.index + match[1].length
+      match.index + match[1].length,
     )
     const matchEndLine = document.lineAt(matchEndPosition).lineNumber
     if (
@@ -70,9 +63,8 @@ async function findAndReplaceInDirectory(directory: string) {
     if (stat.isDirectory()) {
       await findAndReplaceInDirectory(filePath)
     } else if (file.endsWith(".gd")) {
-      const document = await vscode.workspace.openTextDocument(
-        filePath
-      )
+      const document =
+        await vscode.workspace.openTextDocument(filePath)
       await replaceTabsInDocument(document)
     }
   }
@@ -86,7 +78,7 @@ async function replaceTabsInDocument(document: vscode.TextDocument) {
   edit.replace(
     document.uri,
     new vscode.Range(0, 0, document.lineCount, 0),
-    newText
+    newText,
   )
   await vscode.workspace.applyEdit(edit)
   await document.save()
@@ -114,8 +106,8 @@ export function activate(context: vscode.ExtensionContext) {
             await findAndReplaceInDirectory(folder.uri.fsPath)
           }
         }
-      }
-    )
+      },
+    ),
   )
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument((event) => {
@@ -129,7 +121,7 @@ export function activate(context: vscode.ExtensionContext) {
           | vscode.TextDocumentContentChangeEvent
           | undefined
         changes.forEach((change) => {
-          if (getlang() == "css") {
+          if (getlang(change.range.start) == "css") {
             if (change.text == " */") {
               commentStarted = true
               prevchange = change
@@ -156,13 +148,13 @@ export function activate(context: vscode.ExtensionContext) {
           }
         })
       }
-    })
+    }),
   )
   function fixCssComment(
     prevchange: vscode.TextDocumentContentChangeEvent,
     change: vscode.TextDocumentContentChangeEvent,
     commentStart: string,
-    commentEnd: string
+    commentEnd: string,
   ) {
     // log("comment")
     // const editor = vscode.window.activeTextEditor
@@ -196,128 +188,144 @@ export function activate(context: vscode.ExtensionContext) {
     // log(text)
     // log(text)
   }
-  function pressed(key: string, langid: string = getlang()) {
+  function pressed(key: string) {
     const editor = vscode.window.activeTextEditor
     if (!editor) {
       vscode.window.showInformationMessage(
-        "No active editor found. Please open a file."
+        "No active editor found. Please open a file.",
       )
       return
     }
+    var nextOffset = 0
+    var totalAddedLines = 0
     const document = editor.document
-    const cursorPosition = editor.selection.active
-    const thisLine = cursorPosition.line
-    const startingLineText = document.lineAt(cursorPosition.line).text
-    var indent = startingLineText.match(/^\s*/)?.[0] || ""
-    var offset = { line: 0, char: 0 }
-    const atEnd =
-      cursorPosition.character + 1 - Number(key == "\n") ===
-      startingLineText.length
-    var text = startingLineText
-    // var langid = getlang()
+    editor.edit((editBuilder) => {
+      const sortedSelections = [...editor.selections].sort(
+        (a, b) => a.active.line - b.active.line,
+      )
+      editor.selections = sortedSelections.map((selection) => {
+        const cursorPosition = editor.selection.active
+        const thisLine = cursorPosition.line
+        const startingLineText = document.lineAt(
+          cursorPosition.line,
+        ).text
+        var indent = startingLineText.match(/^\s*/)?.[0] || ""
+        var offset = { line: 0, char: 0 }
+        const atEnd =
+          cursorPosition.character + 1 - Number(key == "\n") ===
+          startingLineText.length
+        var text = startingLineText
 
-    // log(document.languageId, langid)
+        var langid = getlang(selection.active)
 
-    switch (langid) {
-      case "python":
-      case "gdscript":
-        if (startingLineText.trim() == "else") {
-          indent = indent.slice(0, -4)
-          text = text.replace(/( *)else/, `${indent}else`)
-        }
+        // log(document.languageId, langid)
 
-        // auto add :
-        if (
-          key == "\n"
-          // && atEnd
-        ) {
-          const hasElseOnSameLine = /\bif\b.*\belse\b/.test(text)
-          if (!hasElseOnSameLine) {
-            text = text.replace(
-              /(^[ \t]*\b(?:if|else|elif|for|while|def|class|match|case)\b *)([^:\n]*)(?<!:)( *$)/g,
-              (_match, p1, p2) => {
-                return `${p1}${p2.trim()}:\n${indent}    `
-              }
-            )
-          }
-        }
-
-        break
-      case "javascript":
-      case "typescript":
-        // auto add () after if
-        if (key == " ") {
-          if (atEnd) {
-            var reg = /(^[^"'`]*)\b(if|for|while|switch|else +if) *$/g
-            if (reg.test(text)) {
-              text = text.replace(
-                reg,
-                (_, a, s) => `${a}${s} (${s == "for" ? "var " : ""})`
-              )
-              offset.char--
+        switch (langid) {
+          case "python":
+          case "gdscript":
+            if (startingLineText.trim() == "else") {
+              indent = indent.slice(0, -4)
+              text = text.replace(/( *)else/, `${indent}else`)
             }
-            text = text.replace(
-              /(?:var|const|let) ?(var|const|let)\s/g,
-              "$1 "
-            )
-            // text = text.replaceAll(/ *([\(\{])/g, " $1")
-          }
-        } else if (key == "\n") {
-          var reg =
-            /(^ *)([^"'`]*)\b(?:(if|for|while|switch|else +if) *\((.+)\) *$|else *$)/g
-          if (reg.test(text)) {
-            text = text.replace(reg, `$&{\n  $1\n$1}`)
-            text = text
-              .replaceAll(/ *\{$/gm, " {")
-              .replaceAll(/ *$/g, "")
-              .replace(/(\}) *(\w+)/g, "$1 $2")
-            offset.line--
-            offset.char++
-          }
+
+            // auto add :
+            if (
+              key == "\n"
+              // && atEnd
+            ) {
+              const hasElseOnSameLine = /\bif\b.*\belse\b/.test(text)
+              if (!hasElseOnSameLine) {
+                text = text.replace(
+                  /(^[ \t]*\b(?:if|else|elif|for|while|def|class|match|case)\b *)([^:\n]*)(?<!:)( *$)/g,
+                  (_match, p1, p2) => {
+                    return `${p1}${p2.trim()}:\n${indent}    `
+                  },
+                )
+              }
+            }
+
+            break
+          case "javascript":
+          case "typescript":
+            // auto add () after if
+            if (key == " ") {
+              if (atEnd) {
+                var reg =
+                  /(^[^"'`]*)\b(if|for|while|switch|else +if) *$/g
+                if (reg.test(text)) {
+                  text = text.replace(
+                    reg,
+                    (_, a, s) =>
+                      `${a}${s} (${s == "for" ? "var " : ""})`,
+                  )
+                  offset.char--
+                }
+                text = text.replace(
+                  /(?:var|const|let) ?(var|const|let)\s/g,
+                  "$1 ",
+                )
+                // text = text.replaceAll(/ *([\(\{])/g, " $1")
+              }
+              break
+            } else if (key == "\n") {
+              var reg =
+                /(^ *)([^"'`]*)\b(?:(if|for|while|switch|else +if) *\((.+)\) *$|else *$)/g
+              if (reg.test(text)) {
+                text = text.replace(reg, `$&{\n  $1\n$1}`)
+                text = text
+                  .replaceAll(/ *\{$/gm, " {")
+                  .replaceAll(/ *$/g, "")
+                  .replace(/(\}) *(\w+)/g, "$1 $2")
+                offset.line--
+                offset.char++
+              }
+              break
+            }
+          default:
+            log("document.languageId", document.languageId, langid)
         }
-      default:
-        log("document.languageId", document.languageId, langid)
-    }
-    if (text !== startingLineText) {
-      // error(text)
-      // apply changes
-      editor.edit((editBuilder) => {
-        if (key == "\n")
-          editBuilder.replace(
-            new vscode.Range(
-              thisLine,
-              0,
-              thisLine + 1,
-              document.lineAt(thisLine + 1).text.match(/ *$/)?.[0]
-                ?.length ?? 0
-            ),
-            text
+        if (text !== startingLineText) {
+          // error(text)
+          // apply changes
+          const linesInReplacement = text.split("\n").length
+          const addedInThisStep = linesInReplacement - 1
+          totalAddedLines += addedInThisStep;
+          if (key == "\n")
+            editBuilder.replace(
+              new vscode.Range(
+                thisLine,
+                0,
+                thisLine + 1,
+                document.lineAt(thisLine + 1).text.match(/ *$/)?.[0]
+                  ?.length ?? 0,
+              ),
+              text,
+            )
+          else
+            editBuilder.replace(
+              new vscode.Range(
+                thisLine,
+                0,
+                thisLine,
+                startingLineText.length,
+              ),
+              text,
+            )
+          // .then(() => {
+          // warn(text.split("\n"), text.split("\n").length)
+          var newLine = thisLine + text.split("\n").length - 1
+          var newCharacter = text.split("\n").pop()?.length || 0
+          nextOffset += newLine - thisLine
+          log(nextOffset, "nextOffset")
+          const newPosition = new vscode.Position(
+            newLine + offset.line + nextOffset,
+            newCharacter + offset.char,
           )
-        else
-          editBuilder.replace(
-            new vscode.Range(
-              thisLine,
-              0,
-              thisLine,
-              startingLineText.length
-            ),
-            text
-          )
+          return new vscode.Selection(newPosition, newPosition)
+        }
+        return e
       })
-      // .then(() => {
-      // warn(text.split("\n"), text.split("\n").length)
-      var newLine = thisLine + text.split("\n").length - 1
-      var newCharacter = text.split("\n").pop()?.length || 0
-      const newPosition = new vscode.Position(
-        newLine + offset.line,
-        newCharacter + offset.char
-      )
-      editor.selection = new vscode.Selection(
-        newPosition,
-        newPosition
-      )
-      // })
-    }
+    })
   }
 }
 export function deactivate() {}
