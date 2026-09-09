@@ -323,7 +323,7 @@ export function activate(context: vscode.ExtensionContext) {
           )
           return new vscode.Selection(newPosition, newPosition)
         }
-        return e
+        return selection
       })
     })
   }
